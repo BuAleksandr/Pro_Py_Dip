@@ -130,31 +130,32 @@ if __name__ == "__main__":
     def search_pare_photo(users_ids):
         url_pare = 'https://vk.com/id' + str(users_ids)
         photo_dict = vk_client.search_photo(users_ids)
-        pprint(photo_dict)
+        # pprint(photo_dict)
         list_pare_user = [url_pare]
         for photos in photo_dict:
             list_pare_user.append(photos[0])
-        print(list_pare_user)
+        # print(list_pare_user)
         return list_pare_user
 
-
     # Чат-бот
-    for event in Poll.listen():
-        if event.type == VkEventType.MESSAGE_NEW:
-            if event.to_me:
-                request = event.text.lower()
-                user_id = event.user_id
-                if request == "привет":
-                    VK_User.write_msg(user_id, f"Привет меня зовут VKinder я помогу Вам найти вторую половинку!"
-                                               f"Для начала необходимо проверить ваши данные, чтобы начать поиск."
-                                               f"Если Вы солласны напишите 'ОК'")
-                elif request == "пока":
-                    VK_User.write_msg(user_id, "До свидания и хорошего Вам настроения (^_^)")
+    def bot():
+        for event in Poll.listen():
+            if event.type == VkEventType.MESSAGE_NEW:
+                if event.to_me:
+                    request = event.text.lower()
+                    user_id = event.user_id
+                    if request == "привет":
+                        VK_User.write_msg(user_id, f"Привет меня зовут VKinder я помогу Вам найти вторую половинку!"
+                                                   f"Для начала необходимо проверить ваши данные, чтобы начать поиск."
+                                                   f"Если Вы солласны напишите 'ОК'")
+                    elif request == "пока":
+                        VK_User.write_msg(user_id, "До свидания и хорошего Вам настроения (^_^)")
 
-                elif request == 'ок':
-                    text = search_pare_photo(VK_User.info_user)
-                    for i in text:
-                        pare_list = str(i)
-                        VK_User.write_msg(user_id, pare_list)
-                else:
-                    VK_User.write_msg(user_id, 'Я вас не понимаю')
+                    elif request == 'ок':
+                        text = search_pare_photo(VK_User.info_user)
+                        for i in text:
+                            pare_list = str(i)
+                            VK_User.write_msg(user_id, pare_list)
+                    else:
+                        VK_User.write_msg(user_id, 'Я вас не понимаю, напишите "привет" для начала работы')
+    bot()
