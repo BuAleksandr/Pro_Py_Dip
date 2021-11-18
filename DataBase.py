@@ -1,33 +1,53 @@
-import sqlalchemy as sq
-
-data_base = 'postgresql://postgres:admin@localhost:5432/postgres'
-engine = sq.create_engine(data_base)
-connection = engine.connect()
-
-Base = declarative_base()
+import psycopg2
+from config_data_base import host, user, password, db_name
 
 
-class Client(Base):
-    __tablename__ = 'Client'
-    id = sq.Column(sq.Integer, primary_key=True)
-    info = sq.Column(sq.String)
-    id_Partner = sq.Column(sq.Integer, sq.ForeignKey('Partner.id'))
+try:
+    # подключаем базу данных
+    connection = psycopg2.connect(
+        host=host,
+        user=user,
+        password=password,
+        database=db_name
+    )
+    connection.autocommit = True
 
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """CREATE TABLE Client(
+            id serial PRIMARY KEY,
+            sex integer,
+            city varchar(50),
+            bdata integer,
+            relation integer);"""
+        )
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """CREATE TABLE Partner(
+            id serial PRIMARY KEY,
+            name varchar(50) NOT NULL,
+            sex integer,
+            city varchar(50),
+            bdata integer,
+            relation integer,
+            id_photo integer references Photo(id),
+            id_Blacklist integer references Blacklist(id));"""
+        )
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """CREATE TABLE Photo(
+            id serial PRIMARY KEY,
+            url varchar(50) NOT NULL);"""
+        )
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """CREATE TABLE Blacklist(
+            id serial PRIMARY KEY);"""
+        )
 
-class Partner(Base):
-    __tablename__ = 'Partner'
-    id = sq.Column(sq.Integer, primary_key=True)
-    info = sq.Column(sq.String)
-    id_Photo = sq.Column(sq.Integer, sq.ForeignKey('Photo.id'))
-    id_Blacklist = sq.Column(sq.Integer, sq.ForeignKey('Blacklist.id'))
-
-
-class Photo(Base):
-    __tablename__ = 'Photo'
-    id = sq.Column(sq.Integer, primary_key=True)
-    url = sq.Column(sq.String)
-
-
-class Blacklist(Base):
-    __tablename__ = 'Blacklist'
-    id = sq.Column(sq.Integer, primary_key=True)
+except Exception as ex:
+    print("Ошибка работы с PostgreSQL", ex)
+finally:
+    if connection:
+        connection.close()
+        print('Соединение с базой данных закрыто')

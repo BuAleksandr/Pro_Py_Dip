@@ -67,6 +67,10 @@ class VK_User:
 
         # Сбор допольнительной информации для поиска второго пользователя
         user_info = {'sex': user_sex, 'city': user_city, 'bdate': bdate, 'relation': user_relation}
+        return user_info
+
+    def search_pare(self, user_info, user_city):
+        # Поиск пары
 
         if user_info['relation'] == '1' or '6':
             status = user_info['relation']
@@ -81,22 +85,23 @@ class VK_User:
         age_to = input('Введите максимальный возраст поиска: ')
         offset = 0
         count = 1000
-        users_ids = []
+        users_ids_pare = []
         while True:
             rs = api.users.search(city=user_city, age_from=age_from, age_to=age_to, sex=sex, offset=offset,
                                   status=status, count=count)
             if not rs['count'] or not rs['items']:
                 break
-            users_ids += [user['id'] for user in rs['items']]
-            if len(users_ids) > 1:
+            users_ids_pare += [user['id'] for user in rs['items']]
+            if len(users_ids_pare) > 1:
                 break
-        # print(f'Найдены люди с ID: {users_ids}')
+            # print(f'Найдены люди с ID: {users_ids_pare}')
+            return users_ids_pare
 
-    def search_photo(self, users_ids, sorting=0):
+    def search_photo(self, users_ids_pare, sorting=0):
         photos_search_url = self.url + 'photos.get'
         photos_search_params = {
             'count': 50,
-            'owner_id': users_ids,
+            'owner_id': users_ids_pare,
             'extended': 1,
             'album_id': 'profile'
         }
@@ -127,15 +132,20 @@ if __name__ == "__main__":
     vk_client = VK_User(token_vk)
 
 
-    def search_pare_photo(users_ids):
-        url_pare = 'https://vk.com/id' + str(users_ids)
-        photo_dict = vk_client.search_photo(users_ids)
-        # pprint(photo_dict)
-        list_pare_user = [url_pare]
-        for photos in photo_dict:
-            list_pare_user.append(photos[0])
-        # print(list_pare_user)
-        return list_pare_user
+    def search_pare_photos(client_info_full, users_ids_pare):
+        pare_id = vk_client.search_pare(client_info_full)
+        if pare_id == 1:
+            sms = ['Простите, для вас в ВК пары нет, сходите в театр']
+            return sms
+        else:
+            for x in users_ids_pare:
+                url_pare = 'https://vk.com/id' + str(x)
+                photos_dict = vk_client.search_photo(x)
+                message_user = [url_pare]
+                for i in photos_dict:
+                    message_user.append(i[0])
+                return message_user
+
 
     # Чат-бот
     def bot():
@@ -152,10 +162,12 @@ if __name__ == "__main__":
                         VK_User.write_msg(user_id, "До свидания и хорошего Вам настроения (^_^)")
 
                     elif request == 'ок':
-                        text = search_pare_photo(VK_User.info_user)
+                        text = search_pare_photos(VK_User.info_user)
                         for i in text:
                             pare_list = str(i)
                             VK_User.write_msg(user_id, pare_list)
                     else:
                         VK_User.write_msg(user_id, 'Я вас не понимаю, напишите "привет" для начала работы')
+
+
     bot()
