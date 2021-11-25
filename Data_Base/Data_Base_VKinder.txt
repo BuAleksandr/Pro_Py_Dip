@@ -1,0 +1,24 @@
+create table if not exists vk_pare(
+id serial primary key,
+pare_id integer not null,
+first_name varchar(50),
+last_name varchar(50),
+bdate varchar(15),
+city varchar(50),
+relation varchar(30),
+url_pare text,
+url_photo1 text,
+url_photo2 text,
+url_photo3 text,
+black_list varchar(30)
+);
+
+create table if not exists vk_users(
+id serial primary key,
+user_id integer not null
+);
+
+create table if not exists vk_users_vk_pare(
+id_user integer references vk_users(id),
+id_pare integer references vk_pare(id)
+);

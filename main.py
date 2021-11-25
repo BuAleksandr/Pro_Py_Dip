@@ -1,173 +1,211 @@
-from pprint import pprint
-from random import randrange
+import vk_config.Vk_Bot
+import vk_config.vk_find_user
+import Data_Base.DataBase
+from vk_config.tokens import token_bot, token_vk
+import re
 
-import requests
-import vk_api
+vk_client = vk_config.vk_find_user.Vk_user(token_vk)
+info_for_DataBase = {}  # Словарь с данными для внесения в базу данных
+list_info_for_DataBase = []  # Список словарей с данными для записи в БД
+dict_blacklist = {}  # Словарь с заблоированными пользователями
+list_blacklist = []  # Список словарей с заблоированными пользователями
 
-from vk_api.longpoll import VkLongPoll, VkEventType
+my_token = token_bot
 
 
-class VK_User:
-    # Сбор информации от пользователя
-    url = 'https://api.vk.com/method/'
+def user_relation(msg):
+    info_user_relation = {1: 'не женат/не замужем', 2: ' есть друг/есть подруга', 3: 'помолвлен/помолвлена',
+                          4: 'женат/замужем', 5: 'всё сложно', 6: 'в активном поиске', 7: 'влюблён/влюблена',
+                          8: 'в гражданском браке', 0: 'не указано'}
+    return info_user_relation.get(msg)
 
-    def __init__(self, token):
-        self.params = {
-            'access_token': token,
-            'v': '5.131'
-        }
 
-    def write_msg(self, message):
-        vk.method('messages.send', {'user_id': self, 'message': message, 'random_id': randrange(10 ** 7)})
+def get_photo(result, owner_id):
+    pare_id = result[0].get('id')
+    first_name = result[0].get('first_name')
+    last_name = result[0].get('last_name')
+    bdate = result[0].get('bdate')
+    city = result[0].get('city').get('title')
+    relation = user_relation(result[0].get('relation'))
 
-    def info_user(self, owner_id, sorting=0):
-        search_url = self.url + 'users.get'
-        search_params = {
-            'user_ids': owner_id,
-            'fields': 'sex, city, relation, bdate'
-        }
-        req = requests.get(search_url, params={**self.params, **search_params}).json()
-        result = req['response'][0]
-        if 'sex' in result:
-            user_sex = result['sex']
-        else:
-            user_sex = input('Введите Ваш пол(1-женщина, 2-мужчина): ')
+    pare = {'pare_id': pare_id, 'first_name': first_name, 'last_name': last_name, 'bdate': bdate,
+            'city': city, 'relation': relation}
 
-        if 'id' in result['city']:
-            user_city = result['city']['id']
-        else:
-            user_city_name = input('Введите название вашего город : ')
-            city_url = self.url + 'database.getCities'
-            city_params = {
-                'q': user_city_name,
-                'count': 100
-            }
-            res_city = requests.get(city_url, params={**self.params, **city_params}).json()
-            user_city = res_city['items'][0]['id']
-            return user_city
+    # Если получили id подходящей пары с фото
+    if vk_client.get_photos(pare_id):
+        account = 'https://vk.com/id' + str(pare_id)
+        dict_photo = vk_client.get_photos(pare_id)
+        list_photo = vk_client.photo_pare(dict_photo)
+        pare_info = {'url_account': account, 'url_photo1': list_photo[0].get('id_photo'),
+                     'url_photo2': list_photo[1].get('id_photo'), 'url_photo3': list_photo[2].get('id_photo')}
+        pare_info_all = {**pare, **pare_info}  # Объединили данные словарей
+        info_for_DataBase['owner_id'] = owner_id
+        info_for_DataBase['pare_info_all'] = pare_info_all
+        temp = info_for_DataBase.copy()  # Создаем временный словарь для передачи словарей в список
+        list_info_for_DataBase.append(temp)
+        #  Занесли в словарь для записи в БД данные о пользователе и словарь с  данными кандидата
+        return pare_info_all
 
-        if 'bdate' in result:
-            user_bdate = result['bdate']
-            user_bdate = str(user_bdate)
-            bdate = user_bdate[-4:]
-            bdate = int(bdate)
-        else:
-            bdate = input('Введите вашу дату рождения(день,месяц,год): ').replace(",", ".")
 
-        if 'relation' in result:
-            user_relation = result['relation']
-        else:
-            user_relation = input('Введите ваше семейное положение(1-не женат/не замужем; 2 — есть друг/есть подруга;/n'
-                                  ' 3 — помолвлен/помолвлена; 4 — женат/замужем; 5 — всё сложно; /n'
-                                  '6 — в активном поиске; 7 — влюблён/влюблена; 8 — в гражданском браке): ')
-            if user_relation == '1' or '6':
-                pass
-            else:
-                print('Извините для Вас поиск невозможен')
+def find_user(users, owner_params, owner_id):
+    owner_params = owner_params
+    owner_id = owner_id
+    list_find = []
+    users = users
+    error_connect = False
+    blacklist_dict = {}
+    for i in users:
+        any_info = vk_client.get_user(i)
+        any_id = any_info[0].get('id')
+        try:
+            pare_id_for_user_id = Data_Base.DataBase.get_pare_id_for_user_id(owner_id, any_id)
+            blacklist_user = Data_Base.DataBase.if_in_black_list(any_id)
+            if (not pare_id_for_user_id) and (not blacklist_user):
+                # Если текущей пары нет в списке данных пользователя и в списке заблокированных
+                if not any_info[0].get('fail'):
+                    #  Если текущий кандидат не заблокирован и его нет в в списке заблокированных
+                    find_users = vk_client.select_users(any_info, owner_params)
+                    #  Поиск кандидата по параметрам
+                    if find_users:
+                        list_find.append(find_users)
+                    print('.', end='')
+                else:
+                    #  В нести в список пар с пометкой заблокированных
+                    blacklist_dict['blacklist_user'] = any_info[0].get('id')
+                    blacklist_dict['blacklist_info'] = any_info[0].get('fail')
+                    black = blacklist_dict.copy()  # Копируем словарь с заблокированными и добавляем в список
+                    list_blacklist.append(black)
 
-        # Сбор допольнительной информации для поиска второго пользователя
-        user_info = {'sex': user_sex, 'city': user_city, 'bdate': bdate, 'relation': user_relation}
-        return user_info
+        except Exception as Error:
+            error_connect = True
+            if not any_info[0].get('deactivated'):
+                #  Если текущая пара не заблокирована
+                find_users = vk_client.select_users(any_info, owner_params)
+                #  Ищем пару по параметрам пользователя
+                if find_users:
+                    list_find.append(find_users)
+                print('.', end='')
 
-    def search_pare(self, user_info, user_city):
-        # Поиск пары
+    if error_connect:
+        print('База данных временно недоступна. find_user, pare_id_for_user_id')
 
-        if user_info['relation'] == '1' or '6':
-            status = user_info['relation']
-        else:
-            print('Извините для Вас поиск невозможен')
-        if user_info['sex'] == 1:
-            sex = 2
-        else:
-            sex = 1
+    return list_find
 
-        age_from = input('Введите минимальный возраст поиска: ')
-        age_to = input('Введите максимальный возраст поиска: ')
-        offset = 0
-        count = 1000
-        users_ids_pare = []
-        while True:
-            rs = api.users.search(city=user_city, age_from=age_from, age_to=age_to, sex=sex, offset=offset,
-                                  status=status, count=count)
-            if not rs['count'] or not rs['items']:
-                break
-            users_ids_pare += [user['id'] for user in rs['items']]
-            if len(users_ids_pare) > 1:
-                break
-            # print(f'Найдены люди с ID: {users_ids_pare}')
-            return users_ids_pare
 
-    def search_photo(self, users_ids_pare, sorting=0):
-        photos_search_url = self.url + 'photos.get'
-        photos_search_params = {
-            'count': 50,
-            'owner_id': users_ids_pare,
-            'extended': 1,
-            'album_id': 'profile'
-        }
-        req = requests.get(photos_search_url, params={**self.params, **photos_search_params}).json()
-        req = req['response']['items']
-        photo_count = len(req)
+def check_user_params(owner_id, owner_params):
+    owner_params = owner_params
+    owner_id = owner_id
+    if not owner_params.get('city', None):  # Если не указан город
+        vk_config.Vk_Bot.write_msg(owner_id, 'Укажите ваш город')
+        city = vk_config.Vk_Bot.dialog()[1].title()
+        owner_params['city'] = city
 
-        photo_dict = {}
-        i = 0
-        while i < photo_count:
-            likes = req[i]['likes']['count']
-            comments = req[i]['comments']['count']
-            photo_dict[req[i]['sizes'][-1]['url']] = int(likes) + int(comments)
-            i += 1
-        photo_dict = sorted(photo_dict.items(), key=lambda x: x[1])
-        if len(photo_dict) > 3:
-            photo_dict = photo_dict[-3:]
-        return photo_dict
+    if owner_params.get('sex') not in (1, 2):  # Если не указан пол
+        message = """
+        Укажите ваш пол
+        женщина - 1
+        мужчина - 2
+        """
+        vk_config.Vk_Bot.write_msg(owner_id, message)
+        sex = vk_config.Vk_Bot.dialog()[1]
+        owner_params[sex] = sex
+
+    if owner_params.get('bdate', None) and re.findall(r"\d{1,2}.\d{1,2}.\d{4}", owner_params.get('bdate')):
+        return owner_params
+    else:
+        # Если не указан год или неверный формат
+        vk_config.Vk_Bot.write_msg(owner_id, 'Укажите ваш год рождения "дд.мм.гггг')
+        bdate = vk_config.Vk_Bot.dialog()[1]
+        owner_params['bdate'] = bdate
+
+
+def send_message_to_user(res, owner_id, pare):
+    result = res
+    owner_id = owner_id
+    pare = pare
+    if pare:  # Если найдена пара с подходящими параметрами и фото
+        vk_config.Vk_Bot.write_msg(owner_id, 'Аккаунт кандидата: ')
+        vk_config.Vk_Bot.write_msg(owner_id,
+                                   f"{result[0].get('first_name')} {result[0].get('last_name')} "
+                                   f"{pare.get('url_account')}")
+        vk_config.Vk_Bot.write_msg(owner_id, 'Фотография пары 1:',
+                                   f"photo{pare.get('pare_id')}_{pare.get('url_photo1')}")
+        vk_config.Vk_Bot.write_msg(owner_id, 'Фотография пары 2:',
+                                   f"photo{pare.get('pare_id')}_{pare.get('url_photo2')}")
+        vk_config.Vk_Bot.write_msg(owner_id, 'Фотография пары 3:',
+                                   f"photo{pare.get('pare_id')}_{pare.get('url_photo3')}")
+        vk_config.Vk_Bot.write_msg(owner_id, '*' * 40)
+
+    else:
+        vk_config.Vk_Bot.write_msg(owner_id, 'Людей по вашему запросу не найдено(((( ')
+
+
+def main():
+    # Диапазон id для сканирования сети
+    users = (i for i in range(100_000_000, 100_000_200))
+    user_message = vk_config.Vk_Bot.dialog()
+    owner_id = user_message[0]
+    owner_message = user_message[1]
+    pare_list_clear = False
+    ban_list_clear = False
+
+    while owner_message != 'поиск пары':  # Ждем от пользователя фразы поиска
+        bot_message = 'Для поиска пары, напишите "поиск пары"'
+        vk_config.Vk_Bot.write_msg(owner_id, bot_message)
+        user_message = vk_config.Vk_Bot.dialog()
+        owner_id = user_message[0]
+        owner_message = user_message[1]
+
+    owner_info = vk_client.get_user(owner_id)  # Получили в списке словарь с необходимыми данными пользователя
+    owner_params = vk_client.user_info(owner_info)  # Сформировали нужные данные
+    owner_params = check_user_params(owner_id, owner_params)
+    vk_config.Vk_Bot.write_msg(owner_id, 'Ищем подходящую пару по вашим параметрам')
+    list_find = find_user(users, owner_params, owner_id)
+
+    #  Ищем пару для данного пользователя
+    if list_find:
+        vk_config.Vk_Bot.write_msg(owner_id, 'Вот подходящие пары: ')
+        for i in list_find:
+            pare = get_photo(i, owner_id)
+            send_message_to_user(i, owner_id, pare)
+
+    # Если нашли пару - заносим в базу данных DataBase
+    if list_info_for_DataBase:
+        for i in list_info_for_DataBase:
+            owner_id = i.get('owner_id')
+            #  Проверяем на наличие текущего id пользователя в БД. Если нет - заносим
+            try:
+                user_in_list = Data_Base.DataBase.if_user_in_list(owner_id)
+                if not user_in_list:
+                    Data_Base.DataBase.insert_user(owner_id)
+            except Exception as Error:
+                print('База данных временно недоступна. owner_id не внесен в БД', {Error})
+
+            try:
+                Data_Base.DataBase.insert_pare(owner_id, i.get('pare_info_all'))  # Занесли в БД информацию о кандидате
+                pare_list_clear = True
+            except Exception as Error:
+                print('База данных временно недоступна, возможны повторы', {Error})
+                vk_config.Vk_Bot.write_msg(owner_id, 'База данных временно недоступна, возможны повторы.')
+    else:
+        print('Записей удовлетворяющих запросу не обнаруеженно.')
+        vk_config.Vk_Bot.write_msg(owner_id, 'Записей удовлетворяющих запросу не обнаруеженно.')
+    if list_blacklist:
+        for i in list_blacklist:
+            try:
+                Data_Base.DataBase.insert_black_list(i.get('blacklist_user'), i.get('blacklist_info'))
+                ban_list_clear = True
+            except Exception as Error:
+                print('База данных временно недоступна, невозможно внести данные о блокеровке пользователя', {Error})
+
+    #  Если данные внесены в БД очищаем список для записи в БД
+    if pare_list_clear:
+        list_info_for_DataBase.clear()
+        pare_list_clear = False
+    if ban_list_clear:
+        list_blacklist.clear()
+        ban_list_clear = False
 
 
 if __name__ == "__main__":
-    token_bot = input(f'Введите ваш токен для чат бота: ')
-    vk = vk_api.VkApi(token=token_bot)
-    Poll = VkLongPoll(vk)
-    token_vk = input(f'Введите ваш токен для работы с VK: ')
-    vk_reg = vk_api.VkApi(token=token_vk)
-    api = vk_reg.get_api()
-    vk_client = VK_User(token_vk)
-
-
-    def search_pare_photos(client_info_full, users_ids_pare):
-        pare_id = vk_client.search_pare(client_info_full)
-        if pare_id == 1:
-            sms = ['Простите, для вас в ВК пары нет, сходите в театр']
-            return sms
-        else:
-            for x in users_ids_pare:
-                url_pare = 'https://vk.com/id' + str(x)
-                photos_dict = vk_client.search_photo(x)
-                message_user = [url_pare]
-                for i in photos_dict:
-                    message_user.append(i[0])
-                return message_user
-
-
-    # Чат-бот
-    def bot():
-        for event in Poll.listen():
-            if event.type == VkEventType.MESSAGE_NEW:
-                if event.to_me:
-                    request = event.text.lower()
-                    user_id = event.user_id
-                    if request == "привет":
-                        VK_User.write_msg(user_id, f"Привет меня зовут VKinder я помогу Вам найти вторую половинку!"
-                                                   f"Для начала необходимо проверить ваши данные, чтобы начать поиск."
-                                                   f"Если Вы солласны напишите 'ОК'")
-                    elif request == "пока":
-                        VK_User.write_msg(user_id, "До свидания и хорошего Вам настроения (^_^)")
-
-                    elif request == 'ок':
-                        text = search_pare_photos(VK_User.info_user)
-                        for i in text:
-                            pare_list = str(i)
-                            VK_User.write_msg(user_id, pare_list)
-                    else:
-                        VK_User.write_msg(user_id, 'Я вас не понимаю, напишите "привет" для начала работы')
-
-
-    bot()
+    main()
