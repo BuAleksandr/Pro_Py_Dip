@@ -43,7 +43,7 @@ def get_photo(result, owner_id):
         info_for_DataBase['pare_info_all'] = pare_info_all
         temp = info_for_DataBase.copy()  # Создаем временный словарь для передачи словарей в список
         list_info_for_DataBase.append(temp)
-        #  Занесли в словарь для записи в БД данные о пользователе и словарь с  данными кандидата
+        #  Заносим в словарь для записи в БД данные о пользователе и словарь с  данными пары
         return pare_info_all
 
 
@@ -63,9 +63,9 @@ def find_user(users, owner_params, owner_id):
             if (not pare_id_for_user_id) and (not blacklist_user):
                 # Если текущей пары нет в списке данных пользователя и в списке заблокированных
                 if not any_info[0].get('fail'):
-                    #  Если текущий кандидат не заблокирован и его нет в в списке заблокированных
+                    #  Если текущая пара не заблокирована и ее нет в списке заблокированных
                     find_users = vk_client.select_users(any_info, owner_params)
-                    #  Поиск кандидата по параметрам
+                    #  Поиск пары по параметрам
                     if find_users:
                         list_find.append(find_users)
                     print('.', end='')
@@ -182,7 +182,7 @@ def main():
                 print('База данных временно недоступна. owner_id не внесен в БД', {Error})
 
             try:
-                Data_Base.DataBase.insert_pare(owner_id, i.get('pare_info_all'))  # Занесли в БД информацию о кандидате
+                Data_Base.DataBase.insert_pare(owner_id, i.get('pare_info_all'))  # Заносим в БД информацию о паре
                 pare_list_clear = True
             except Exception as Error:
                 print('База данных временно недоступна, возможны повторы', {Error})
