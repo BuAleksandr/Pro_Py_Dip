@@ -78,7 +78,7 @@ def find_user(users, owner_params, owner_id):
 
         except Exception as Error:
             error_connect = True
-            if not any_info[0].get('deactivated'):
+            if not any_info[0].get('fail'):
                 #  Если текущая пара не заблокирована
                 find_users = vk_client.select_users(any_info, owner_params)
                 #  Ищем пару по параметрам пользователя

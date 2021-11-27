@@ -57,7 +57,7 @@ class Vk_user:
             self.fail = None
 
         self.find_info = {'bdate': self.bdate, 'sex': self.sex, 'city': self.city, 'relation': self.relation,
-                          'deactivated': self.fail}
+                          'fail': self.fail}
         return self.find_info
 
     def select_users(self, any_info: list, find_params: list):
