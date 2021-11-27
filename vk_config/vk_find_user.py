@@ -60,7 +60,7 @@ class Vk_user:
                           'fail': self.fail}
         return self.find_info
 
-    def select_users(self, any_info: list, find_params: list):
+    def select_users(self, any_info, find_params):
         self.any_info = any_info
         self.find_params = find_params
 
